@@ -5,13 +5,16 @@ import android.os.Bundle
 // Your IDE likely can auto-import these classes, but there are several
 // different implementations so we list them here to disambiguate
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.util.Size
 import android.graphics.Matrix
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Log
 import android.util.Rational
+import android.view.MotionEvent
 import android.view.Surface
 import android.view.TextureView
 import android.view.ViewGroup
@@ -20,6 +23,7 @@ import android.widget.Toast
 import androidx.camera.core.*
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import kotlinx.android.synthetic.main.activity_main.*
 import java.io.File
 import java.nio.ByteBuffer
 import java.util.concurrent.TimeUnit
@@ -30,15 +34,24 @@ import java.util.concurrent.TimeUnit
 private const val REQUEST_CODE_PERMISSIONS = 10
 
 // This is an array of all the permission specified in the manifest
-private val REQUIRED_PERMISSIONS = arrayOf(Manifest.permission.CAMERA)
+private val REQUIRED_PERMISSIONS = arrayOf(
+    Manifest.permission.CAMERA,
+    Manifest.permission.RECORD_AUDIO
+)
 
 class MainActivity : AppCompatActivity() {
+
+    private lateinit var videoCapture:VideoCapture
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+
+
         viewFinder = findViewById(R.id.view_finder)
+
+
 
         // Request camera permissions
         if (allPermissionsGranted()) {
@@ -57,12 +70,20 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var viewFinder: TextureView
 
+    @SuppressLint("RestrictedApi")
     private fun startCamera() {
         // Create configuration object for the viewfinder use case
         val previewConfig = PreviewConfig.Builder().apply {
             setTargetAspectRatio(Rational(1, 1))
             setTargetResolution(Size(640, 640))
         }.build()
+
+        // Create a configuration object for the video use case
+        val videoCaptureConfig = VideoCaptureConfig.Builder().apply {
+            setTargetRotation(viewFinder.display.rotation)
+        }.build()
+        videoCapture = VideoCapture(videoCaptureConfig)
+
 
         // Build the viewfinder use case
         val preview = Preview(previewConfig)
@@ -112,6 +133,39 @@ class MainActivity : AppCompatActivity() {
                 })
         }
 
+
+        videoCapture_button.setOnTouchListener { _, event ->
+
+            val file = File(externalMediaDirs.first(),
+                "${System.currentTimeMillis()}.mp4")
+
+            if (event.action == MotionEvent.ACTION_DOWN) {
+                videoCapture_button.setBackgroundColor(Color.GREEN)
+                videoCapture.startRecording(file, object: VideoCapture.OnVideoSavedListener{
+                    override fun onVideoSaved(file: File?) {
+                        val msg = "Video capture succeeded: ${file?.absolutePath}"
+                        Log.d("CameraXApp", "Video File : $file")
+                        Toast.makeText(baseContext,msg,Toast.LENGTH_SHORT).show()
+                    }
+                    override fun onError(useCaseError: VideoCapture.UseCaseError?, message: String?, cause: Throwable?) {
+                        Log.d("CameraXApp", "Video Error: $message")
+                        val msg ="Video capture failed:$message"
+                        Toast.makeText(baseContext,msg,Toast.LENGTH_SHORT).show()
+
+                    }
+                })
+
+            } else if (event.action == MotionEvent.ACTION_UP) {
+                videoCapture_button.setBackgroundColor(Color.RED)
+                videoCapture.stopRecording()
+                Log.i("CameraXApp", "Video File stopped")
+                val msg = "Video Record Stopped"
+                Toast.makeText(baseContext,msg,Toast.LENGTH_SHORT).show()
+            }
+            false
+        }
+
+
         // Setup image analysis pipeline that computes average pixel luminance
         val analyzerConfig = ImageAnalysisConfig.Builder().apply {
             // Use a worker thread for image analysis to prevent glitches
@@ -129,12 +183,7 @@ class MainActivity : AppCompatActivity() {
             analyzer = LuminosityAnalyzer()
         }
 
-
-        // Bind use cases to lifecycle
-        // If Android Studio complains about "this" being not a LifecycleOwner
-        // try rebuilding the project or updating the appcompat dependency to
-        // version 1.1.0 or higher.
-        CameraX.bindToLifecycle(this, preview, imageCapture)
+        CameraX.bindToLifecycle(this, preview, imageCapture,videoCapture)
     }
 
     private fun updateTransform() {
