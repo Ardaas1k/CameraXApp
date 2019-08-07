@@ -6,6 +6,7 @@ import android.os.Bundle
 // different implementations so we list them here to disambiguate
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.util.Size
@@ -14,10 +15,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.util.Log
 import android.util.Rational
-import android.view.MotionEvent
-import android.view.Surface
-import android.view.TextureView
-import android.view.ViewGroup
+import android.view.*
 import android.widget.ImageButton
 import android.widget.Toast
 import androidx.camera.core.*
@@ -41,17 +39,17 @@ private val REQUIRED_PERMISSIONS = arrayOf(
 
 class MainActivity : AppCompatActivity() {
 
+
     private lateinit var videoCapture:VideoCapture
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
 
 
         viewFinder = findViewById(R.id.view_finder)
-
-
 
         // Request camera permissions
         if (allPermissionsGranted()) {
@@ -74,8 +72,8 @@ class MainActivity : AppCompatActivity() {
     private fun startCamera() {
         // Create configuration object for the viewfinder use case
         val previewConfig = PreviewConfig.Builder().apply {
-            setTargetAspectRatio(Rational(1, 1))
-            setTargetResolution(Size(640, 640))
+            setTargetAspectRatio(Rational(9, 16))
+            setTargetResolution(Size(1080, 1920))
         }.build()
 
         // Create a configuration object for the video use case
@@ -112,10 +110,10 @@ class MainActivity : AppCompatActivity() {
 
         // Build the image capture use case and attach button click listener
         val imageCapture = ImageCapture(imageCaptureConfig)
+        val imageFile = File(externalMediaDirs.first(), "${System.currentTimeMillis()}.jpg")
+
         findViewById<ImageButton>(R.id.capture_button).setOnClickListener {
-            val file = File(externalMediaDirs.first(),
-                "${System.currentTimeMillis()}.jpg")
-            imageCapture.takePicture(file,
+            imageCapture.takePicture(imageFile,
                 object : ImageCapture.OnImageSavedListener {
                     override fun onError(error: ImageCapture.UseCaseError,
                                          message: String, exc: Throwable?) {
@@ -132,9 +130,41 @@ class MainActivity : AppCompatActivity() {
                     }
                 })
         }
+        
+        val videoFile = File(externalMediaDirs.first(), "${System.currentTimeMillis()}.mp4")
 
+        videoCapture_button.setOnClickListener {
+            videoCapture_button.visibility=View.GONE
+            videoStopCapture_button.visibility=View.VISIBLE
+            var msg = "Video Record Started"
+            Toast.makeText(baseContext,msg,Toast.LENGTH_SHORT).show()
+            videoCapture.startRecording(videoFile, object: VideoCapture.OnVideoSavedListener{
+                override fun onVideoSaved(file: File?) {
+                    msg = "Video capture succeeded: ${file?.absolutePath}"
+                    Log.d("CameraXApp", "Video File : $file")
+                    Toast.makeText(baseContext,msg,Toast.LENGTH_SHORT).show()
+                }
+                override fun onError(useCaseError: VideoCapture.UseCaseError?, message: String?, cause: Throwable?) {
+                    Log.d("CameraXApp", "Video Error: $message")
+                    msg ="Video capture failed:$message"
+                    Toast.makeText(baseContext,msg,Toast.LENGTH_SHORT).show()
 
-        videoCapture_button.setOnTouchListener { _, event ->
+                }
+            })
+        }
+
+        videoStopCapture_button.visibility = View.GONE
+        videoStopCapture_button.setOnClickListener {
+            videoStopCapture_button.visibility = View.GONE
+            videoCapture_button.visibility = View.VISIBLE
+            videoCapture.stopRecording()
+            Log.i("CameraXApp", "Video File stopped")
+            val msg = "Video Record Stopped"
+            Toast.makeText(baseContext,msg,Toast.LENGTH_SHORT).show()
+        }
+
+/*
+videoCapture_button.setOnTouchListener { _, event ->
 
             val file = File(externalMediaDirs.first(),
                 "${System.currentTimeMillis()}.mp4")
@@ -164,6 +194,8 @@ class MainActivity : AppCompatActivity() {
             }
             false
         }
+ */
+
 
 
         // Setup image analysis pipeline that computes average pixel luminance
@@ -179,7 +211,7 @@ class MainActivity : AppCompatActivity() {
         }.build()
 
         // Build the image analysis use case and instantiate our analyzer
-        val analyzerUseCase = ImageAnalysis(analyzerConfig).apply {
+        ImageAnalysis(analyzerConfig).apply {
             analyzer = LuminosityAnalyzer()
         }
 
