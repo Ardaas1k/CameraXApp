@@ -5,22 +5,30 @@ import android.os.Bundle
 // Your IDE likely can auto-import these classes, but there are several
 // different implementations so we list them here to disambiguate
 import android.Manifest
+import android.Manifest.permission.READ_EXTERNAL_STORAGE
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
+import android.database.Cursor
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.util.Size
 import android.graphics.Matrix
+import android.net.Uri
 import android.os.Handler
 import android.os.HandlerThread
+import android.provider.MediaStore
 import android.util.Log
 import android.util.Rational
 import android.view.*
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.Toast
 import androidx.camera.core.*
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.squareup.picasso.Picasso
 import kotlinx.android.synthetic.main.activity_main.*
 import java.io.File
 import java.nio.ByteBuffer
@@ -64,6 +72,34 @@ class MainActivity : AppCompatActivity() {
             updateTransform()
         }
 
+        imageButton.visibility = View.GONE
+        gallery_button.setOnClickListener {
+
+            val intent: Intent = Intent();
+            intent.setType("image/*");
+            intent.setAction(Intent.ACTION_GET_CONTENT);
+            startActivityForResult(Intent.createChooser(intent, "Select Picture"), PICK_IMAGE)
+
+        }
+    }
+
+    val PICK_IMAGE = 1
+
+    @SuppressLint("MissingSuperCall")
+    public override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode == PICK_IMAGE) {
+            val selectedImageURI = data?.getData();
+            if(selectedImageURI!=null){
+                imageButton.visibility = View.VISIBLE
+                imageButton.setImageURI(selectedImageURI)
+            }
+            imageButton.setOnClickListener {
+                imageButton.visibility= View.GONE
+                val intent:Intent = Intent(this,Gallery::class.java)
+                intent.putExtra("imageUri",selectedImageURI.toString())
+                startActivity(intent)
+            }
+        }
     }
 
     private lateinit var viewFinder: TextureView
@@ -73,7 +109,7 @@ class MainActivity : AppCompatActivity() {
         // Create configuration object for the viewfinder use case
         val previewConfig = PreviewConfig.Builder().apply {
             setTargetAspectRatio(Rational(9, 16))
-            setTargetResolution(Size(1080, 1920))
+            setTargetResolution(Size(2160, 3840))
         }.build()
 
         // Create a configuration object for the video use case
@@ -163,38 +199,7 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(baseContext,msg,Toast.LENGTH_SHORT).show()
         }
 
-/*
-videoCapture_button.setOnTouchListener { _, event ->
 
-            val file = File(externalMediaDirs.first(),
-                "${System.currentTimeMillis()}.mp4")
-
-            if (event.action == MotionEvent.ACTION_DOWN) {
-                videoCapture_button.setBackgroundColor(Color.GREEN)
-                videoCapture.startRecording(file, object: VideoCapture.OnVideoSavedListener{
-                    override fun onVideoSaved(file: File?) {
-                        val msg = "Video capture succeeded: ${file?.absolutePath}"
-                        Log.d("CameraXApp", "Video File : $file")
-                        Toast.makeText(baseContext,msg,Toast.LENGTH_SHORT).show()
-                    }
-                    override fun onError(useCaseError: VideoCapture.UseCaseError?, message: String?, cause: Throwable?) {
-                        Log.d("CameraXApp", "Video Error: $message")
-                        val msg ="Video capture failed:$message"
-                        Toast.makeText(baseContext,msg,Toast.LENGTH_SHORT).show()
-
-                    }
-                })
-
-            } else if (event.action == MotionEvent.ACTION_UP) {
-                videoCapture_button.setBackgroundColor(Color.RED)
-                videoCapture.stopRecording()
-                Log.i("CameraXApp", "Video File stopped")
-                val msg = "Video Record Stopped"
-                Toast.makeText(baseContext,msg,Toast.LENGTH_SHORT).show()
-            }
-            false
-        }
- */
 
 
 
@@ -217,6 +222,9 @@ videoCapture_button.setOnTouchListener { _, event ->
 
         CameraX.bindToLifecycle(this, preview, imageCapture,videoCapture)
     }
+
+
+
 
     private fun updateTransform() {
         val matrix = Matrix()
